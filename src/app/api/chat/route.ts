@@ -11,6 +11,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
+    // Check for required environment variables
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+    }
+
+    if (!process.env.QDRANT_URL) {
+      return NextResponse.json({ error: 'Qdrant URL not configured' }, { status: 500 });
+    }
+
     // Initialize OpenAI client
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -22,13 +31,28 @@ export async function POST(request: NextRequest) {
     });
 
     // Initialize vector store
-    const store = await QdrantVectorStore.fromExistingCollection(
-      embeddings,
-      {
-        url: process.env.QDRANT_URL || 'http://localhost:6333',
-        collectionName: 'genai-rag',
-      }
-    );
+    const qdrantConfig: any = {
+      url: process.env.QDRANT_URL,
+      collectionName: 'rag-app',
+    };
+
+    // Add API key for Qdrant Cloud if available
+    if (process.env.QDRANT_API_KEY) {
+      qdrantConfig.apiKey = process.env.QDRANT_API_KEY;
+    }
+
+    let store;
+    try {
+      store = await QdrantVectorStore.fromExistingCollection(
+        embeddings,
+        qdrantConfig
+      );
+    } catch (error) {
+      console.error('Error connecting to Qdrant:', error);
+      return NextResponse.json({ 
+        error: 'Unable to connect to vector database. Please ensure Qdrant is running and properly configured.' 
+      }, { status: 500 });
+    }
 
     // Create retriever with limited results to stay within token limits
     const vectorStore = store.asRetriever({
@@ -51,10 +75,10 @@ export async function POST(request: NextRequest) {
 You are an AI assistant who helps resolve user queries based on the context available to you from the indexed documents.
 
 Instructions:
-- Only answer based on the available context from the documents with the page number mentioned in the context or source of the information (uploaded resources/uploaded files/uploaded website/ not from local file system) .
-- If the context doesn't contain enough information to answer the question, say sorry for the inconvenience and ask the user to provide more information or source of the information.
-- Be helpful and provide detailed answers when possible and do not provide any information that is not in the context.
-- If you're unsure about something, mention it and ask the user to provide more information or source of the information.
+- Answer based on the available context from the documents. Mention the source of information when possible.
+- If the context contains relevant information, provide a helpful and detailed answer.
+- If the context doesn't contain enough information to fully answer the question, provide what information is available and mention that more details might be needed.
+- Be helpful and informative while staying grounded in the provided context.
 
 Context from documents:
 ${contextString}

@@ -116,10 +116,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Store documents in Qdrant
-    await QdrantVectorStore.fromDocuments(allDocuments, embeddings, {
+    const qdrantConfig: any = {
       url: process.env.QDRANT_URL || 'http://localhost:6333',
-      collectionName: 'genai-rag',
-    });
+      collectionName: 'rag-app',
+    };
+
+    // Add API key for Qdrant Cloud if available
+    if (process.env.QDRANT_API_KEY) {
+      qdrantConfig.apiKey = process.env.QDRANT_API_KEY;
+    }
+
+    await QdrantVectorStore.fromDocuments(allDocuments, embeddings, qdrantConfig);
 
     // Generate summaries for each resource
     const summaries: Array<{ resourceName: string; summary: string }> = [];
