@@ -1,8 +1,8 @@
 // Common types
-export { Message, UploadedResource } from './common';
+export type { Message, UploadedResource } from './common';
 
 // Component-specific types
-export { SourcesPanelProps } from './SourcesPanel';
-export { ChatContainerProps } from './ChatContainer';
-export { ChatInterfaceProps } from './ChatInterface';
-export { RagStoreProps } from './RagStore';
+export type { SourcesPanelProps } from './SourcesPanel';
+export type { ChatContainerProps } from './ChatContainer';
+export type { ChatInterfaceProps } from './ChatInterface';
+export type { RagStoreProps } from './RagStore';

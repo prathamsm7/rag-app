@@ -92,7 +92,7 @@ export default function SourcesPanel({
           <div className="text-center text-gray-400 mt-8">
             <div className="text-4xl mb-2">📁</div>
             <p className="text-sm">No sources added yet</p>
-            <p className="text-xs text-gray-500 mt-1">Click "Add" to upload files or add websites</p>
+            <p className="text-xs text-gray-500 mt-1">Click &quot;Add&quot; to upload files or add websites</p>
           </div>
         ) : (
           <div className="space-y-2">

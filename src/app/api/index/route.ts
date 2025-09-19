@@ -7,7 +7,7 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { OpenAI } from 'openai';
 
 // Helper function to generate summary
-async function generateSummary(documents: Array<{ pageContent: string; metadata: Record<string, unknown> }>, resourceName: string): Promise<string> {
+async function generateSummary(documents: Array<{ pageContent: string; metadata: Record<string, unknown> }>): Promise<string> {
   try {
     const client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -116,7 +116,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Store documents in Qdrant
-    const qdrantConfig: any = {
+    const qdrantConfig: {
+      url: string;
+      collectionName: string;
+      apiKey?: string;
+    } = {
       url: process.env.QDRANT_URL || 'http://localhost:6333',
       collectionName: 'rag-app',
     };
@@ -131,7 +135,7 @@ export async function POST(request: NextRequest) {
     // Generate summaries for each resource
     const summaries: Array<{ resourceName: string; summary: string }> = [];
     for (const resource of resourceSummaries) {
-      const summary = await generateSummary(resource.documents, resource.resourceName);
+      const summary = await generateSummary(resource.documents);
       summaries.push({
         resourceName: resource.resourceName,
         summary: summary

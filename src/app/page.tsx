@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import SourcesPanel from '@/components/SourcesPanel';
 import ChatContainer from '@/components/ChatContainer';
 import { UploadedResource } from '@/types/common';
@@ -64,7 +64,7 @@ export default function Home() {
         if (data.summaries && data.summaries.length > 0) {
           setResources(prev => {
             return prev.map(resource => {
-              const summaryData = data.summaries.find((s: any) => s.resourceName === resource.name);
+              const summaryData = data.summaries.find((s: { resourceName: string; summary: string }) => s.resourceName === resource.name);
               return summaryData ? { ...resource, summary: summaryData.summary } : resource;
             });
           });
@@ -72,7 +72,7 @@ export default function Home() {
           // Update selectedResource if it matches
           setSelectedResource(prev => {
             if (prev) {
-              const summaryData = data.summaries.find((s: any) => s.resourceName === prev.name);
+              const summaryData = data.summaries.find((s: { resourceName: string; summary: string }) => s.resourceName === prev.name);
               return summaryData ? { ...prev, summary: summaryData.summary } : prev;
             }
             return prev;

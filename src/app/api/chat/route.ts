@@ -31,7 +31,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Initialize vector store
-    const qdrantConfig: any = {
+    const qdrantConfig: {
+      url: string;
+      collectionName: string;
+      apiKey?: string;
+    } = {
       url: process.env.QDRANT_URL,
       collectionName: 'rag-app',
     };
