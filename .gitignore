@@ -42,3 +42,5 @@ next-env.d.ts
 
 # uploads directory (no longer needed - files processed from memory)
 /uploads
+
+/src/generated/prisma
