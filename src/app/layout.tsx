@@ -28,7 +28,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <SessionProvider>
+        <SessionProvider
+          refetchInterval={5 * 60} // Refetch every 5 minutes (default is every 30 seconds!)
+          refetchOnWindowFocus={false} // Don't refetch when window gains focus
+          refetchWhenOffline={false} // Don't refetch when coming back online
+        >
           {children}
         </SessionProvider>
       </body>

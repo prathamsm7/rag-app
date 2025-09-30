@@ -2,24 +2,49 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Message } from '@/types/common';
-import { ChatInterfaceProps } from '@/types/ChatInterface';
+import { SessionResource } from '@/types/Session';
 
-export default function ChatInterface({ isIndexed }: ChatInterfaceProps) {
+interface ChatInterfaceProps {
+  currentSession: any;
+  sessionResources: SessionResource[];
+  selectedResources: string[];
+  onAddSessionResource: (type: 'pdf' | 'website' | 'text', data: any) => void;
+  onRemoveSessionResource: (resourceId: string) => void;
+  isIndexing: boolean;
+}
+
+export default function ChatInterface({
+  currentSession,
+  sessionResources,
+  selectedResources,
+  onAddSessionResource,
+  onRemoveSessionResource,
+  isIndexing,
+}: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  useEffect(() => {
+    if (currentSession && currentSession.messages) {
+      setMessages(currentSession.messages.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content,
+        isUser: msg.role === 'user',
+        timestamp: new Date(msg.createdAt),
+      })));
+    } else {
+      setMessages([]);
+    }
+  }, [currentSession]);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !isIndexed || isLoading) return;
+    if (!inputMessage.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -38,7 +63,11 @@ export default function ChatInterface({ isIndexed }: ChatInterfaceProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: inputMessage }),
+        body: JSON.stringify({ 
+          message: inputMessage,
+          chatSessionId: currentSession?.id || null,
+          documentIds: selectedResources
+        }),
       });
 
       if (response.ok) {
@@ -59,10 +88,11 @@ export default function ChatInterface({ isIndexed }: ChatInterfaceProps) {
         };
         setMessages(prev => [...prev, errorMessage]);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: 'Sorry, I encountered a network error. Please try again.',
         isUser: false,
         timestamp: new Date(),
       };
@@ -72,7 +102,7 @@ export default function ChatInterface({ isIndexed }: ChatInterfaceProps) {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -80,78 +110,115 @@ export default function ChatInterface({ isIndexed }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <h2 className="text-xl font-semibold">Chat</h2>
-      
+    <div className="flex flex-col h-full bg-gray-900 text-white">
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-semibold">{currentSession?.title || 'New Chat'}</h2>
+          <p className="text-sm text-gray-400">
+            {selectedResources.length} of {sessionResources.length} sources selected
+          </p>
+        </div>
+        <div className="flex items-center space-x-4">
+          <span className="text-sm text-gray-400">
+            {sessionResources.length} source{sessionResources.length !== 1 ? 's' : ''} loaded
+          </span>
+        </div>
+      </div>
+
       {/* Chat Messages */}
-      <div className="bg-gray-700 rounded-lg p-4 flex-1 min-h-[300px] max-h-[400px] overflow-y-auto">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="text-gray-400 text-4xl mb-2">💬</div>
-              <p className="text-sm text-gray-400">
-                {isIndexed 
-                  ? 'Ask questions about your data!' 
-                  : 'Index some data first to start chatting'
-                }
-              </p>
-            </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {!currentSession ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">💬</div>
+            <h3 className="text-xl font-semibold mb-2">Select a conversation</h3>
+            <p className="text-gray-500">Choose a conversation from the list to start chatting</p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
-                    message.isUser
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-600 text-gray-100'
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                  <p className="text-xs opacity-70 mt-1">
-                    {message.timestamp.toLocaleTimeString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-600 text-gray-100 p-3 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
+        ) : messages.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">🚀</div>
+            <h3 className="text-xl font-semibold mb-2">Start the conversation</h3>
+            <p className="text-gray-500 mb-6">Ask questions about your selected sources</p>
+            
+            {selectedResources.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-400">Suggested questions:</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setInputMessage("What are the key concepts covered in these sources?")}
+                    className="block w-full text-left px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                  >
+                    What are the key concepts covered in these sources?
+                  </button>
+                  <button
+                    onClick={() => setInputMessage("Can you summarize the main topics?")}
+                    className="block w-full text-left px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                  >
+                    Can you summarize the main topics?
+                  </button>
+                  <button
+                    onClick={() => setInputMessage("What are the important takeaways?")}
+                    className="block w-full text-left px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                  >
+                    What are the important takeaways?
+                  </button>
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-3xl px-4 py-3 rounded-lg ${
+                  message.isUser
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-100'
+                }`}
+              >
+                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className={`text-xs mt-2 ${
+                  message.isUser ? 'text-blue-100' : 'text-gray-400'
+                }`}>
+                  {message.timestamp.toLocaleTimeString()}
+                </p>
+              </div>
+            </div>
+          ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Chat Input */}
-      <div className="flex space-x-2">
-        <input
-          type="text"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder={isIndexed ? "Ask a question..." : "Index data first..."}
-          disabled={!isIndexed || isLoading}
-          className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-        />
-        <button
-          onClick={handleSendMessage}
-          disabled={!inputMessage.trim() || !isIndexed || isLoading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
-        >
-          Send
-        </button>
+      <div className="bg-gray-800 border-t border-gray-700 p-6">
+        <div className="flex items-center space-x-4">
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask a question about your sources..."
+            className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-white placeholder-gray-400"
+            disabled={isLoading || selectedResources.length === 0}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!inputMessage.trim() || isLoading || selectedResources.length === 0}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white p-3 rounded-full transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </div>
+        {selectedResources.length === 0 && (
+          <p className="text-sm text-gray-500 mt-2">
+            Select at least one source to start chatting
+          </p>
+        )}
       </div>
     </div>
   );

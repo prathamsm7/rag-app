@@ -11,6 +11,12 @@ export default auth((req) => {
     nextUrl.pathname.startsWith(route)
   )
 
+  // Define protected API routes that require authentication
+  const protectedApiRoutes = ["/api/index", "/api/chat", "/api/user-data"]
+  const isProtectedApiRoute = protectedApiRoutes.some(route => 
+    nextUrl.pathname.startsWith(route)
+  )
+
   // Define auth routes (login, signup, etc.)
   const authRoutes = ["/auth/signin", "/auth/signup", "/auth/error"]
   const isAuthRoute = authRoutes.some(route => 
@@ -27,6 +33,14 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/auth/signin", nextUrl))
   }
 
+  // Return 401 for protected API routes without auth
+  if (isProtectedApiRoute && !isLoggedIn) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    )
+  }
+
   return NextResponse.next()
 })
 
@@ -34,12 +48,12 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - api/auth (auth API routes)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/auth).*)",
   ],
   runtime: 'nodejs', // Force Node.js runtime instead of edge
 }
