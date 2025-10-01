@@ -7,7 +7,7 @@ export interface DocumentChunk {
   metadata: {
     documentId?: string;
     source?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 

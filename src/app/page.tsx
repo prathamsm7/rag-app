@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { UploadedResource } from '@/types/common';
-import { ChatSession, SessionResource, AppState } from '@/types/Session';
+import { ChatSession, AppState } from '@/types/Session';
 import NewChatModal from '@/components/NewChatModal';
 
 export default function Home() {

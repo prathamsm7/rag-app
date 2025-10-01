@@ -181,7 +181,6 @@ export async function POST(request: NextRequest) {
 
     // Add document IDs to the metadata of documents before storing in Qdrant
     const documentsWithIds = [];
-    let docIndex = 0;
     
     for (let i = 0; i < resourceSummaries.length; i++) {
       const resource = resourceSummaries[i];

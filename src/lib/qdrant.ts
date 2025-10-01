@@ -94,8 +94,8 @@ export async function getUserVectorStore(
         return await QdrantVectorStore.fromExistingCollection(embeddings, config);
       }
     }
-  } catch (error: any) {
-    console.log(`Collection ${config.collectionName} does not exist or error accessing it:`, error.message);
+  } catch (error: unknown) {
+    console.log(`Collection ${config.collectionName} does not exist or error accessing it:`, error instanceof Error ? error.message : 'Unknown error');
     
     if (documents && documents.length > 0) {
       console.log(`Creating new collection with ${documents.length} documents`);

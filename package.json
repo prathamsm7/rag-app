@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "build:prod": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "qdrant:up": "docker-compose up -d",

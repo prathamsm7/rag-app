@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import { ChatSession, SessionResource } from '@/types/Session';
 import SourceSelection from '@/components/SourceSelection';
