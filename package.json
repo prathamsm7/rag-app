@@ -10,7 +10,8 @@
     "lint": "eslint",
     "qdrant:up": "docker-compose up -d",
     "qdrant:down": "docker-compose down",
-    "qdrant:logs": "docker-compose logs -f qdrant"
+    "qdrant:logs": "docker-compose logs -f qdrant",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
