@@ -43,6 +43,8 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  documents     Document[]
+  chatSessions  ChatSession[]
 }
 
 model VerificationToken {
@@ -51,4 +53,50 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Document {
+  id            String       @id @default(cuid())
+  userId        String
+  chatSessionId String?
+  name          String
+  type          String       // 'pdf', 'website', 'text'
+  source        String       // filename, URL, or 'text_input'
+  summary       String?
+  chunkCount    Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatSession   ChatSession? @relation("SessionDocuments", fields: [chatSessionId], references: [id], onDelete: SetNull)
+  messages      Message[]
+
+  @@index([userId])
+  @@index([chatSessionId])
+}
+
+model ChatSession {
+  id        String     @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  documents Document[] @relation("SessionDocuments")
+
+  @@index([userId])
+}
+
+model Message {
+  id            String       @id @default(cuid())
+  chatSessionId String
+  documentId    String?
+  role          String       // 'user' or 'assistant'
+  content       String
+  createdAt     DateTime     @default(now())
+  chatSession   ChatSession  @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  document      Document?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([chatSessionId])
+  @@index([documentId])
 }

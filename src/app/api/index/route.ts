@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { QdrantVectorStore } from '@langchain/qdrant';
-import { OpenAIEmbeddings } from '@langchain/openai';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { OpenAI } from 'openai';
+import { auth } from '@/lib/auth';
+import { PrismaClient } from '@prisma/client';
+import { getUserVectorStore } from '@/lib/qdrant';
+
+const prisma = new PrismaClient();
 
 // Helper function to generate summary
 async function generateSummary(documents: Array<{ pageContent: string; metadata: Record<string, unknown> }>): Promise<string> {
@@ -20,7 +23,7 @@ async function generateSummary(documents: Array<{ pageContent: string; metadata:
       .substring(0, 4000); // Limit context length
 
     const response = await client.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -46,30 +49,39 @@ async function generateSummary(documents: Array<{ pageContent: string; metadata:
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const formData = await request.formData();
     const dataSource = formData.get('dataSource') as string;
     const textContent = formData.get('textContent') as string;
     const websiteUrl = formData.get('websiteUrl') as string;
+    const chatSessionId = formData.get('chatSessionId') as string;
     
     let allDocuments: Array<{ pageContent: string; metadata: Record<string, unknown> }> = [];
     const resourceSummaries: Array<{ resourceName: string; documents: Array<{ pageContent: string; metadata: Record<string, unknown> }> }> = [];
+    const documentsToCreate: Array<{ name: string; type: string; source: string; chunkCount: number }> = [];
     
-    // Initialize embeddings
-    const embeddings = new OpenAIEmbeddings({
-      model: 'text-embedding-3-large',
-    });
-
     // Initialize text splitter to handle large documents
     const textSplitter = new RecursiveCharacterTextSplitter({
       chunkSize: 1000,
       chunkOverlap: 200,
     });
 
+
     if (dataSource === 'textarea' && textContent) {
       // Handle text input
       const textDoc = {
         pageContent: textContent,
-        metadata: { source: 'text_input' },
+        metadata: { 
+          source: 'text_input',
+          userId: userId,
+          documentType: 'text'
+        },
       };
       const splitDocs = await textSplitter.splitDocuments([textDoc]);
       allDocuments = splitDocs;
@@ -77,15 +89,36 @@ export async function POST(request: NextRequest) {
         resourceName: 'Text Input',
         documents: splitDocs
       });
+      documentsToCreate.push({
+        name: 'Text Input',
+        type: 'text',
+        source: 'text_input',
+        chunkCount: splitDocs.length
+      });
     } else if (dataSource === 'website' && websiteUrl) {
       // Handle website scraping
       const loader = new CheerioWebBaseLoader(websiteUrl);
       const webDocs = await loader.load();
-      const splitDocs = await textSplitter.splitDocuments(webDocs);
+      // Add user metadata to each document
+      const docsWithMetadata = webDocs.map(doc => ({
+        ...doc,
+        metadata: {
+          ...doc.metadata,
+          userId: userId,
+          documentType: 'website'
+        }
+      }));
+      const splitDocs = await textSplitter.splitDocuments(docsWithMetadata);
       allDocuments = splitDocs;
       resourceSummaries.push({
         resourceName: websiteUrl,
         documents: splitDocs
+      });
+      documentsToCreate.push({
+        name: websiteUrl,
+        type: 'website',
+        source: websiteUrl,
+        chunkCount: splitDocs.length
       });
     } else if (dataSource === 'upload') {
       // Handle file uploads - process directly from memory
@@ -98,11 +131,26 @@ export async function POST(request: NextRequest) {
             // Process PDF directly from memory using Blob
             const loader = new PDFLoader(file);
             const fileDocs = await loader.load();
-            const splitDocs = await textSplitter.splitDocuments(fileDocs);
+            // Add user metadata to each document
+            const docsWithMetadata = fileDocs.map(doc => ({
+              ...doc,
+              metadata: {
+                ...doc.metadata,
+                userId: userId,
+                documentType: 'pdf'
+              }
+            }));
+            const splitDocs = await textSplitter.splitDocuments(docsWithMetadata);
             allDocuments = allDocuments.concat(splitDocs);
             resourceSummaries.push({
               resourceName: file.name,
               documents: splitDocs
+            });
+            documentsToCreate.push({
+              name: file.name,
+              type: 'pdf',
+              source: file.name,
+              chunkCount: splitDocs.length
             });
           } else {
             console.warn(`Unsupported file type: ${fileExtension}. Only PDF files are supported.`);
@@ -115,37 +163,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No documents to index' }, { status: 400 });
     }
 
-    // Store documents in Qdrant
-    const qdrantConfig: {
-      url: string;
-      collectionName: string;
-      apiKey?: string;
-    } = {
-      url: process.env.QDRANT_URL || 'http://localhost:6333',
-      collectionName: 'rag-app',
-    };
+    // Store document metadata in database first to get document IDs
+    const createdDocuments = await Promise.all(
+      documentsToCreate.map(async (docData) => {
+        return await prisma.document.create({
+          data: {
+            userId: userId,
+            chatSessionId: chatSessionId || null,
+            name: docData.name,
+            type: docData.type,
+            source: docData.source,
+            chunkCount: docData.chunkCount,
+          }
+        });
+      })
+    );
 
-    // Add API key for Qdrant Cloud if available
-    if (process.env.QDRANT_API_KEY) {
-      qdrantConfig.apiKey = process.env.QDRANT_API_KEY;
+    // Add document IDs to the metadata of documents before storing in Qdrant
+    const documentsWithIds = [];
+    let docIndex = 0;
+    
+    for (let i = 0; i < resourceSummaries.length; i++) {
+      const resource = resourceSummaries[i];
+      const documentId = createdDocuments[i]?.id;
+      
+      // Add document ID to all chunks of this resource
+      for (const doc of resource.documents) {
+        documentsWithIds.push({
+          ...doc,
+          metadata: {
+            ...doc.metadata,
+            documentId: documentId
+          }
+        });
+      }
     }
 
-    await QdrantVectorStore.fromDocuments(allDocuments, embeddings, qdrantConfig);
+    // Store documents in user-specific Qdrant collection with document IDs
+    await getUserVectorStore(userId, documentsWithIds);
 
-    // Generate summaries for each resource
-    const summaries: Array<{ resourceName: string; summary: string }> = [];
-    for (const resource of resourceSummaries) {
+    // Generate summaries for each resource and update database
+    const summaries: Array<{ resourceName: string; summary: string; documentId: string }> = [];
+    for (let i = 0; i < resourceSummaries.length; i++) {
+      const resource = resourceSummaries[i];
+      const document = createdDocuments[i];
       const summary = await generateSummary(resource.documents);
+      
+      // Update document with summary
+      await prisma.document.update({
+        where: { id: document.id },
+        data: { summary: summary }
+      });
+
       summaries.push({
         resourceName: resource.resourceName,
-        summary: summary
+        summary: summary,
+        documentId: document.id
       });
     }
 
     return NextResponse.json({ 
       success: true, 
       message: `Successfully indexed ${allDocuments.length} document chunks`,
-      summaries: summaries
+      summaries: summaries,
+      documents: createdDocuments.map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        type: doc.type,
+        source: doc.source,
+        chunkCount: doc.chunkCount,
+        createdAt: doc.createdAt
+      }))
     });
 
   } catch (error) {
